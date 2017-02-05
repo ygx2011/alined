@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package>
+  <name>alined</name>
+  <version>0.1.0</version>
+  <description>Functionality to get DLT-Based pose from lines only.</description>
+  <maintainer email="lamparta@student.ethz.ch">Lampart Andrea Luca</maintainer>
+  <license>GPLv3</license>
+  <author >Lampart Andrea Luca</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>cmake_modules</build_depend>
+
+  <run_depend>roscpp</run_depend>
+  <run_depend>cmake_modules</run_depend>
+
+
+  <export>
+  </export>
+</package>
