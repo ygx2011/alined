@@ -1,12 +1,17 @@
-#ifndef ALINED_HPP
-#define ALINED_HPP
+#pragma once
 
 #include "Eigen/Eigen"
+#include "Eigen/SVD"
 
 
 
 
 class Alined{
+public:
+
+  Alined();
+  ~Alined();
+
 
   /*!
    * \brief Camera pose from line correspondences using DLT-Combined-Lines method
@@ -18,6 +23,7 @@ class Alined{
    */
   Eigen::Matrix4d poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w);
 
+
 private:
 
   /*!
@@ -27,7 +33,14 @@ private:
    */
   Eigen::Matrix<double,6,Eigen::Dynamic> createPluckerLines(const Eigen::Matrix<double,4,Eigen::Dynamic> &X);
 
+  /*!
+   * \brief Calculate the Kronecker product with matrices m1 and m2
+   * \param m1
+   * \param m2
+   * \return Matrix
+   */
+  Eigen::MatrixXd kron(Eigen::MatrixXd m1, Eigen::MatrixXd m2);
 
 };
 
-#endif // ALINED_HPP
+

@@ -36,7 +36,9 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
   )
 
-add_executable(alined_test src/ros_nodes/alined_test_node.cpp)
+add_executable(alined_test
+  src/ros_nodes/alined_test_node.cpp
+  ${${PROJECT_NAME}_CODE_BASE})
 target_link_libraries(alined_test ${catkin_LIBRARIES} ${CERES_LIBRARIES})
 
 

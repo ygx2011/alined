@@ -1,22 +1,5 @@
 #include <ros/ros.h>
-#include "ceres/ceres.h"
-#include "glog/logging.h"
-
-using ceres::AutoDiffCostFunction;
-using ceres::CostFunction;
-using ceres::Problem;
-using ceres::Solver;
-using ceres::Solve;
-
-struct CostFunctor {
-
-  template <typename T>
-  bool operator()(const T* const x, T* residual) const {
-    residual[0] = T(10.0) - x[0];
-    return true;
-  }
-
-};
+#include "alined/alined.hpp"
 
 
 int main(int argc, char **argv)
@@ -24,23 +7,46 @@ int main(int argc, char **argv)
   // Set up ROS.
   ros::init(argc, argv, "ceres_test_node");
 
-  google::InitGoogleLogging(argv[0]);
+  Alined alined;
+  Eigen::Matrix<double,3,10> x_c;
+  Eigen::Matrix<double,4, 10> X_w;
 
-  double x = 0.5;
-  const double initial_x = x;
+  // Line 1
+  X_w.block<4,1>(0,0) = Eigen::Vector4d(0,0,0,1);
+  X_w.block<4,1>(0,1) = Eigen::Vector4d(1,0,0,1);
 
-  Problem problem;
+  x_c.block<3,1>(0,0) = Eigen::Vector3d(0,0,0);
+  x_c.block<3,1>(1,1) = Eigen::Vector3d(0,0,0);
 
-  CostFunction* cost_function = new AutoDiffCostFunction<CostFunctor,1,1>(new CostFunctor);
-  problem.AddResidualBlock(cost_function, NULL, &x);
-  Solver::Options options;
-  options.minimizer_progress_to_stdout = true;
-  Solver::Summary summary;
-  Solve(options, &problem, &summary);
+  X_w.block<4,1>(0,2) = Eigen::Vector4d(1,0,0,1);
+  X_w.block<4,1>(0,3) = Eigen::Vector4d(2,0,0,1);
 
-  std::cout << summary.BriefReport() << "\n";
-  std::cout << "x : " <<initial_x << " -> "<<x<<"\n";
+  x_c.block<3,1>(0,2) = Eigen::Vector3d(0,0,0);
+  x_c.block<3,1>(1,3) = Eigen::Vector3d(0,0,0);
 
+  X_w.block<4,1>(0,4) = Eigen::Vector4d(2,0,0,1);
+  X_w.block<4,1>(0,5) = Eigen::Vector4d(3,0,0,1);
+
+  x_c.block<3,1>(0,4) = Eigen::Vector3d(0,0,0);
+  x_c.block<3,1>(1,5) = Eigen::Vector3d(0,0,0);
+
+  X_w.block<4,1>(0,6) = Eigen::Vector4d(3,0,0,1);
+  X_w.block<4,1>(0,7) = Eigen::Vector4d(4,0,0,1);
+
+  x_c.block<3,1>(0,6) = Eigen::Vector3d(0,0,0);
+  x_c.block<3,1>(1,7) = Eigen::Vector3d(0,0,0);
+
+  X_w.block<4,1>(0,8) = Eigen::Vector4d(4,0,0,1);
+  X_w.block<4,1>(0,9) = Eigen::Vector4d(5,0,0,1);
+
+  x_c.block<3,1>(0,8) = Eigen::Vector3d(0,0,0);
+  x_c.block<3,1>(1,9) = Eigen::Vector3d(0,0,0);
+
+
+  //std::cout << X_w<< "\n\n" << X_w(4,0)<<"\n\n";
+
+  std::cout <<"Begin Test: \n";
+  alined.poseFromLines(x_c,X_w);
 
   return 0;
 }
