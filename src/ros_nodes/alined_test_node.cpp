@@ -8,44 +8,64 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "ceres_test_node");
 
   Alined alined;
-  Eigen::Matrix<double,3,10> x_c;
-  Eigen::Matrix<double,4, 10> X_w;
+  Eigen::MatrixXd x_c;
+  Eigen::Matrix<double,4, 16> X_w;
 
-  // Line 1
-  X_w.block<4,1>(0,0) = Eigen::Vector4d(0,0,0,1);
-  X_w.block<4,1>(0,1) = Eigen::Vector4d(1,0,0,1);
+  // Virtual camera position
 
-  x_c.block<3,1>(0,0) = Eigen::Vector3d(0,0,0);
-  x_c.block<3,1>(1,1) = Eigen::Vector3d(0,0,0);
+  Eigen::Vector3d cam_pos_w(1.5, 0 , 0.5);
+  Eigen::Matrix3d cam_ori_w;
 
-  X_w.block<4,1>(0,2) = Eigen::Vector4d(1,0,0,1);
-  X_w.block<4,1>(0,3) = Eigen::Vector4d(2,0,0,1);
+  // Align camera's z-axis with world negative Y-axis
+  // The choice of coordinate systems is consistent with the one in
+  // "Pose Estimation from Line Correspondences using DLT" by B. Pribyl, 2016
+  cam_ori_w << 1 ,0 ,0, 0, 0, -1, 0, 1, 0;
 
-  x_c.block<3,1>(0,2) = Eigen::Vector3d(0,0,0);
-  x_c.block<3,1>(1,3) = Eigen::Vector3d(0,0,0);
+  Eigen::Matrix<double, 3, 4> projection_matrix;
+  projection_matrix.block<3,3>(0,0) = cam_ori_w.transpose();
+  projection_matrix.block<3,1>(0,3) = -(cam_ori_w.transpose())*cam_pos_w;
 
-  X_w.block<4,1>(0,4) = Eigen::Vector4d(2,0,0,1);
-  X_w.block<4,1>(0,5) = Eigen::Vector4d(3,0,0,1);
+  std::cout << "Projection Matrix = \n\n" << projection_matrix << "\n\n";
 
-  x_c.block<3,1>(0,4) = Eigen::Vector3d(0,0,0);
-  x_c.block<3,1>(1,5) = Eigen::Vector3d(0,0,0);
+  //------------ Build 3D House ------------------//
 
-  X_w.block<4,1>(0,6) = Eigen::Vector4d(3,0,0,1);
-  X_w.block<4,1>(0,7) = Eigen::Vector4d(4,0,0,1);
+  // (1,1,0)->(2,1,0)
+  X_w.block<4,1>(0,0) = Eigen::Vector4d(1,1,0,1);
+  X_w.block<4,1>(0,1) = Eigen::Vector4d(2,1,0,1);
 
-  x_c.block<3,1>(0,6) = Eigen::Vector3d(0,0,0);
-  x_c.block<3,1>(1,7) = Eigen::Vector3d(0,0,0);
+  // (2,1,0)->(2,2,0)
+  X_w.block<4,1>(0,2) = Eigen::Vector4d(2,1,0,1);
+  X_w.block<4,1>(0,3) = Eigen::Vector4d(2,2,0,1);
 
-  X_w.block<4,1>(0,8) = Eigen::Vector4d(4,0,0,1);
-  X_w.block<4,1>(0,9) = Eigen::Vector4d(5,0,0,1);
+  // (2,2,0)->(1,2,0)
+  X_w.block<4,1>(0,4) = Eigen::Vector4d(2,2,0,1);
+  X_w.block<4,1>(0,5) = Eigen::Vector4d(1,2,0,1);
 
-  x_c.block<3,1>(0,8) = Eigen::Vector3d(0,0,0);
-  x_c.block<3,1>(1,9) = Eigen::Vector3d(0,0,0);
+  // (1,2,0)->(1,1,0)
+  X_w.block<4,1>(0,6) = Eigen::Vector4d(1,2,0,1);
+  X_w.block<4,1>(0,7) = Eigen::Vector4d(1,1,0,1);
+
+  // (1,1,0)->(1,1,1)
+  X_w.block<4,1>(0,8) = Eigen::Vector4d(1,1,0,1);
+  X_w.block<4,1>(0,9) = Eigen::Vector4d(1,1,1,1);
+
+  // (1,1,1)->(2,1,1)
+  X_w.block<4,1>(0,10) = Eigen::Vector4d(1,1,1,1);
+  X_w.block<4,1>(0,11) = Eigen::Vector4d(2,1,1,1);
+
+  // (2,1,1)->(2,2,1)
+  X_w.block<4,1>(0,12) = Eigen::Vector4d(2,1,1,1);
+  X_w.block<4,1>(0,13) = Eigen::Vector4d(2,2,1,1);
+
+  // (2,2,1)->(1,2,1)
+  X_w.block<4,1>(0,14) = Eigen::Vector4d(2,2,1,1);
+  X_w.block<4,1>(0,15) = Eigen::Vector4d(1,2,1,1);
+
+  std::cout << "blabla\n";
+  x_c = projection_matrix*X_w;
 
 
-  //std::cout << X_w<< "\n\n" << X_w(4,0)<<"\n\n";
-
-  std::cout <<"Begin Test: \n";
+  std::cout <<"Begin Test: \n\n";
   alined.poseFromLines(x_c,X_w);
 
   return 0;
