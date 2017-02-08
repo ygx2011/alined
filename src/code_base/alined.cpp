@@ -1,6 +1,7 @@
 #include "alined/alined.hpp"
 #include "exception"
 #include "iostream"
+#include "unsupported/Eigen/MatrixFunctions"
 
 #define MIN_LINES 5
 
@@ -51,10 +52,10 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   // As the moment V is coupled to the distance from the line to the origin, this places the line
   // in [1 1 1] distance from the origin.
 
-  /*for(int i = 0; i < nlines; i++){
+  for(int i = 0; i < nlines; i++){
     Eigen::Vector3d V = L_w.block<3,1>(3,i);
     L_w.block<6,1>(0,i) = (sqrt(3) * L_w.block<6,1>(0,i).eval())/V.norm();
-  }*/
+  }
 
   // Translate points and lines to have their centroid at the origin
 
@@ -144,6 +145,8 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   //std::cout << "M_ll = \n\n" << M_ll << "\n\n";
   //std::cout << "M_pl = \n\n" << M_pl << "\n\n";
 
+
+
   // Combine measurement matrices
   Eigen::MatrixXd M;
   M.setZero(M_pl.rows()+M_ll.rows(),21);
@@ -174,7 +177,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   // Algorithm 1 + 2 from paper: scale estimation + R1 orthogonalization
   Eigen::JacobiSVD<Eigen::MatrixXd> svd_P(P1_est, Eigen::ComputeFullV|Eigen::ComputeFullU);
   double det = (svd_P.matrixU()*((svd_P.matrixV()).transpose())).determinant();
-  double scale = det/svd_P.singularValues().array().sum()*3;
+  double scale = 3*det/svd_P.singularValues().array().sum();
 
   //std::cout << "U = " << svd_P.matrixU() <<"\n\n";
   //std::cout << "V = " << svd_P.matrixV() <<"\n\n";
@@ -186,9 +189,72 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   Eigen::MatrixXd T_est = scale*R_est.transpose()*P2_est;
 
 
-  std::cout << "R_est = \n\n" << R_est <<"\n\n" << "T_est = \n\n" << -T_est << "\n\n";
+  //std::cout << "R_est = \n\n" << R_est <<"\n\n" << "T_est = \n\n" << -T_est << "\n\n";
+
+  // Algorithm 3: decomposition of an essential matrix R[t]x
+  // from "Uniqueness and estimation of 3D motion...," , Tsai, Huang 1984
+
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd_P_3(scale*P3_est, Eigen::ComputeFullV|Eigen::ComputeFullU);
+
+  Eigen::Matrix3d Z;
+  Z << 0,1,0,-1,0,0,0,0,0;
+
+  Eigen::Matrix3d W;
+  W << 0,-1,0,1,0,0,0,0,1;
+  double q = (svd_P_3.singularValues().array().sum())*0.5;
+
+  // 2 possible Solutions A/B
+  double det_A = (svd_P_3.matrixU()*W*svd_P_3.matrixV().transpose()).determinant();
+  double det_B = (svd_P_3.matrixU()*W.transpose()*svd_P_3.matrixV().transpose()).determinant();
 
 
+
+  Eigen::Matrix3d R_A = svd_P_3.matrixU()*W*Eigen::DiagonalMatrix<double,3>(1,1,det_A)*svd_P_3.matrixV().transpose();
+  Eigen::Matrix3d R_B = svd_P_3.matrixU()*W.transpose()*Eigen::DiagonalMatrix<double,3>(1,1,det_B)*svd_P_3.matrixV().transpose();
+
+  Eigen::Matrix3d T_A = q*svd_P_3.matrixV()*Z*svd_P_3.matrixV().transpose();
+  Eigen::Matrix3d T_B = q*svd_P_3.matrixV()*Z.transpose()*svd_P_3.matrixV().transpose();
+
+  //Calculate nearest skew symmetric matrix in case of noisy values
+  T_A = (T_A.eval()-T_A.eval().transpose())*0.5;
+  T_B = (T_B.eval()-T_B.eval().transpose())*0.5;
+
+  //std::cout << "R_A =\n\n" <<R_A <<"\n\nR_B =\n\n"<<R_B<<"\n\n";
+
+  // Choose a solution based on which one is closer to R_est (closer to viewing direction)
+  double theta_A = acos(((R_A.transpose()*R_est).trace()-1)*0.5);
+  double theta_B = acos(((R_B.transpose()*R_est).trace()-1)*0.5);
+
+  Eigen::Matrix3d R_est_two;
+  Eigen::Vector3d T_est_two;
+
+  if(theta_A <= theta_B){
+    R_est_two = R_A;
+    T_est_two = Eigen::Vector3d(T_A(2,1),T_A(0,2),T_A(1,0));
+  }
+  else{
+    R_est_two = R_B;
+    T_est_two = Eigen::Vector3d(T_B(1,2),T_B(2,0),T_B(0,1));;
+  }
+
+  //std::cout << "R_est_two =\n\n" <<R_est_two <<"\n\nT_est_two =\n\n"<<T_est_two<<"\n\n";
+
+  // Generate output
+  double k = 0.7;
+
+  //Interpolate rotations
+
+  Eigen::Matrix3d log_R_diff = (R_est_two.transpose()*R_est).log();
+  Eigen::Matrix3d R = R_est*(((1-k)*log_R_diff).exp());
+  Eigen::Vector3d T = ((k*T_est).array() + ((1-k)*T_est_two).array()).matrix();
+  Eigen::Matrix4d tf;
+  tf.block<3,3>(0,0) = R;
+  tf.block<3,1>(0,3) = R*T;
+  tf.block<1,4>(3,0) = Eigen::Vector4d(0,0,0,1).transpose();
+
+  std::cout << "Estimated Pose = \n\n"<<tf<<"\n\n";
+
+  return tf;
 
 
 }
