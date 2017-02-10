@@ -9,7 +9,9 @@
 class Alined{
 public:
 
-  Alined();
+  enum DLT_METHOD{LINE_DLT,COMBINED_LINES} method_;
+
+  Alined(DLT_METHOD = COMBINED_LINES);
   ~Alined();
 
 
@@ -35,11 +37,25 @@ private:
 
   /*!
    * \brief Calculate the Kronecker product with matrices m1 and m2
-   * \param m1
-   * \param m2
+   * \param m1 - matrix
+   * \param m2 - matrix
    * \return Matrix
    */
   Eigen::MatrixXd kron(Eigen::MatrixXd m1, Eigen::MatrixXd m2);
+
+  /*!
+   * \brief Create a skew-symmetric matrix from a vector
+   * \param vec - 3x1 vector
+   * \return skew 3x3 matrix
+   */
+  inline Eigen::Matrix3d skew(const Eigen::Vector3d& vec);
+
+  /*!
+   * \brief Create a vector from a skew-symmetric matrix
+   * \param skew - 3x3 matrix
+   * \return vec - 3x1 vector
+   */
+  inline Eigen::Vector3d unskew(const Eigen::Matrix3d& skew);
 
 };
 

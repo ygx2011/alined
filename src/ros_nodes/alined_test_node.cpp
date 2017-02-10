@@ -1,15 +1,18 @@
 #include <ros/ros.h>
 #include "alined/alined.hpp"
+#include "geometry_msgs/PoseArray.h"
 
 
 int main(int argc, char **argv)
 {
   // Set up ROS.
-  ros::init(argc, argv, "ceres_test_node");
+  ros::init(argc, argv, "alined_test_node");
 
-  Alined alined;
+  std::cout << "Using Eigen v."<<EIGEN_WORLD_VERSION<<"."<<EIGEN_MAJOR_VERSION<<"."<<EIGEN_MINOR_VERSION<<"\n";
+
+  Alined alined(alined.LINE_DLT);
   Eigen::MatrixXd x_c;
-  Eigen::Matrix<double,4, 18> X_w;
+  Eigen::Matrix<double,4, 16> X_w;
 
   // Virtual camera position
 
@@ -30,24 +33,24 @@ int main(int argc, char **argv)
   //------------ Build 3D House ------------------//
 
   // (1,1,0)->(2,1,0)
-  X_w.block<4,1>(0,0) = Eigen::Vector4d(1,1,0,1);
+  X_w.block<4,1>(0,0) = Eigen::Vector4d(0.2,1,0,1);
   X_w.block<4,1>(0,1) = Eigen::Vector4d(2,1,0,1);
 
   // (2,1,0)->(2,2,0)
-  X_w.block<4,1>(0,2) = Eigen::Vector4d(2,1,0,1);
-  X_w.block<4,1>(0,3) = Eigen::Vector4d(2,2,0,1);
+  X_w.block<4,1>(0,2) = Eigen::Vector4d(1.1,1,1,1);
+  X_w.block<4,1>(0,3) = Eigen::Vector4d(2.1,1,1,1);
 
   // (2,2,0)->(1,2,0)
-  X_w.block<4,1>(0,4) = Eigen::Vector4d(2,2,0,1);
-  X_w.block<4,1>(0,5) = Eigen::Vector4d(1,2,0,1);
+  X_w.block<4,1>(0,4) = Eigen::Vector4d(1.2,1,2,1);
+  X_w.block<4,1>(0,5) = Eigen::Vector4d(2.2,1,2,1);
 
   // (1,2,0)->(1,1,0)
-  X_w.block<4,1>(0,6) = Eigen::Vector4d(1,2,0,1);
-  X_w.block<4,1>(0,7) = Eigen::Vector4d(1,1,0,1);
+  X_w.block<4,1>(0,6) = Eigen::Vector4d(1.12,1,1,1);
+  X_w.block<4,1>(0,7) = Eigen::Vector4d(1.12,1,2,1);
 
   // (1,1,0)->(1,1,1)
-  X_w.block<4,1>(0,8) = Eigen::Vector4d(1,1,0,1);
-  X_w.block<4,1>(0,9) = Eigen::Vector4d(1,1,1,1);
+  X_w.block<4,1>(0,8) = Eigen::Vector4d(0.98,1,0,1);
+  X_w.block<4,1>(0,9) = Eigen::Vector4d(0.98,1,1,1);
 
   // (1,1,1)->(2,1,1)
   X_w.block<4,1>(0,10) = Eigen::Vector4d(6,1,2,1);
@@ -61,9 +64,7 @@ int main(int argc, char **argv)
   X_w.block<4,1>(0,14) = Eigen::Vector4d(2,2,1,1);
   X_w.block<4,1>(0,15) = Eigen::Vector4d(1,2,1,1);
 
-  // (1,2,1)->(1,1,1)
-  X_w.block<4,1>(0,15) = Eigen::Vector4d(9,2,1,1);
-  X_w.block<4,1>(0,16) = Eigen::Vector4d(1,1,1,1);
+
 
 
 
