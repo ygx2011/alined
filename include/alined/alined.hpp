@@ -1,17 +1,17 @@
 #pragma once
 
 #include "Eigen/Eigen"
+#include "Eigen/Geometry"
 #include "Eigen/SVD"
-
-
 
 
 class Alined{
 public:
 
   enum DLT_METHOD{LINE_DLT,COMBINED_LINES} method_;
+  enum ITERATIVE{NO_REFINEMENT,USE_ITERATIVE_REFINEMENT} iterative_;
 
-  Alined(DLT_METHOD = COMBINED_LINES);
+  Alined(DLT_METHOD = COMBINED_LINES, ITERATIVE = NO_REFINEMENT);
   ~Alined();
 
 
@@ -21,9 +21,10 @@ public:
    *        Pribyl, B., Zemcik, P. and Cadik, M.
    * \param x - 3x(2N) 2D line endpoints (Don't need to correspond to 3D line endpoint locations)
    * \param X - 4x(2N) 3D line endpoints
-   * \return
+   * \return Pose
    */
   Eigen::Matrix4d poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w);
+
 
 
 private:
@@ -56,6 +57,15 @@ private:
    * \return vec - 3x1 vector
    */
   inline Eigen::Vector3d unskew(const Eigen::Matrix3d& skew);
+
+  /*!
+   * \brief Iteratively find the correct pose using the R_then_T algorithm by Horn
+   * \param tf - Initial Pose
+   * \param X - Point matrix
+   * \param l_c - 2D line Matrix
+   * \return Pose
+   */
+  Eigen::Matrix4d refineIteratively(const Eigen::Matrix4d &tf, Eigen::Matrix<double,4, Eigen::Dynamic> X_w, Eigen::Matrix<double, 3, Eigen::Dynamic> l_c);
 
 };
 

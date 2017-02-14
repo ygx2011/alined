@@ -6,9 +6,11 @@
 
 #define MIN_LINES_COMBINED 5
 #define MIN_LINES_DLT 6
+#define MAX_ITER 20
 
-Alined::Alined(DLT_METHOD method)
+Alined::Alined(DLT_METHOD method, ITERATIVE iterative)
   :method_(method)
+  ,iterative_(iterative)
 {
 
 
@@ -25,6 +27,9 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 
   //Output matrix
   Eigen::Matrix4d tf;
+  Eigen::MatrixXd X_w_orig = X_w;
+  Eigen::Matrix<double, 3, Eigen::Dynamic> l_c;
+  Eigen::MatrixXd l_c_orig;
 
 //----------------------------DLT-COMBINED-LINES-------------------------------------------------------------------//
   if(method_ == COMBINED_LINES){
@@ -97,14 +102,15 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   Eigen::Matrix<double, 3, Eigen::Dynamic> x_1 = Eigen::MatrixXd::Map(x_c.data(),6, x_c.cols()/2).topRows(3);
   Eigen::Matrix<double, 3, Eigen::Dynamic> x_2 = Eigen::MatrixXd::Map(x_c.data(),6, x_c.cols()/2).bottomRows(3);
 
-  Eigen::Matrix<double, 3, Eigen::Dynamic> l_c;
+
   l_c.resize(3, nlines);
 
   for(int i = 0; i < nlines; i++){
     l_c.block<3,1>(0,i) = x_1.block<3,1>(0,i).cross(x_2.block<3,1>(0,i));
   }
 
-  //std::cout << "Measurement Matrix l_c = \n\n"<<l_c<<"\n\n";
+  l_c_orig = l_c;
+
 
   //---------------- Combined Measurement Matrix ------------------------------------------------------------------//
 
@@ -367,15 +373,55 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
     Eigen::Matrix<double, 3, Eigen::Dynamic> x_1 = Eigen::MatrixXd::Map(x_c.data(),6, x_c.cols()/2).topRows(3);
     Eigen::Matrix<double, 3, Eigen::Dynamic> x_2 = Eigen::MatrixXd::Map(x_c.data(),6, x_c.cols()/2).bottomRows(3);
 
-    Eigen::Matrix<double, 3, Eigen::Dynamic> l_c;
+
     l_c.resize(3, nlines);
 
     for(int i = 0; i < nlines; i++){
       l_c.block<3,1>(0,i) = x_1.block<3,1>(0,i).cross(x_2.block<3,1>(0,i));
     }
 
+    l_c_orig = l_c;
+
     //-----------------Prenormalize lines----------------------------------------------------------------------------//
 
+    // Treat lines as 2d points and translate them to have their centroid at the origin
+    double t_prenorm_x = (l_c.block(0,0,1,l_c.cols()).array()/l_c.block(2,0,1,l_c.cols()).array()).sum()/l_c.cols();
+    double t_prenorm_y = (l_c.block(1,0,1,l_c.cols()).array()/l_c.block(2,0,1,l_c.cols()).array()).sum()/l_c.cols();
+
+    Eigen::Vector2d t_prenorm(t_prenorm_x,t_prenorm_y);
+    Eigen::Matrix3d dp;
+    dp.block<2,2>(0,0) = Eigen::DiagonalMatrix<double,2>(1,1);
+    dp.block<2,1>(0,2) = -t_prenorm;
+    dp.block<1,3>(2,0) = Eigen::Vector3d(0,0,1).transpose();
+
+
+    Eigen::MatrixXd l_c_t = dp*l_c;
+
+    // Anisotropic scaling: mean distance to origin should be sqrt(3)
+    Eigen::MatrixXd l_c_ABS = l_c_t.array().abs().matrix();
+    double aniso_l_x = (l_c_ABS.block(0,0,1,l_c_ABS.cols()).array()/l_c_ABS.block(2,0,1,l_c_ABS.cols()).array()).sum()/l_c_ABS.cols();
+    double aniso_l_y = (l_c_ABS.block(1,0,1,l_c_ABS.cols()).array()/l_c_ABS.block(2,0,1,l_c_ABS.cols()).array()).sum()/l_c_ABS.cols();
+
+    Eigen::Vector2d aniso_l(aniso_l_x,aniso_l_y);
+    Eigen::Vector2d ones_l(1,1);
+
+    Eigen::Vector2d prescaleVector_l = ones_l.array()/aniso_l.array();
+    Eigen::DiagonalMatrix<double,3> diag_l;
+    diag_l.diagonal() = Eigen::Vector3d(prescaleVector_l(0),prescaleVector_l(1),1);
+
+
+
+    Eigen::Matrix3d ds = diag_l;
+
+    //std::cout << "diag_l = \n\n" << ds << "\n\n";
+
+
+
+
+    // Combine translation and scaling
+    Eigen::Matrix3d dsp = ds*dp;
+
+    l_c = dsp*l_c.eval();
 
 
     //---------------- Combined Measurement Matrix ------------------------------------------------------------------//
@@ -413,8 +459,11 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
     // First estimate of projection matrix using last singular vector
     Eigen::Matrix<double, 3, 4> P_est = V_right;
 
-    // Revert point prenormalization
-    P_est = P_est*DS;
+    // Revert line prenormalization
+    P_est = (dsp.transpose())*P_est.eval();
+
+    // Revert point prenormalization (only scaling)
+    P_est = P_est.eval()*DS;
 
     // Algorithm 1 + 2 from paper: scale estimation + R1 orthogonalization
     Eigen::JacobiSVD<Eigen::MatrixXd> svd_P(P_est.leftCols(3), Eigen::ComputeFullV|Eigen::ComputeFullU);
@@ -436,6 +485,10 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 
 
   }
+
+  if(iterative_ == USE_ITERATIVE_REFINEMENT)
+    tf = refineIteratively(tf,X_w_orig,l_c_orig);
+
   toc();
   return tf;
 
@@ -508,3 +561,97 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
    return vec;
 
  }
+
+ Eigen::Matrix4d Alined::refineIteratively(const Eigen::Matrix4d &tf, Eigen::Matrix<double,4, Eigen::Dynamic> X_w, Eigen::Matrix<double, 3, Eigen::Dynamic> l_c){
+
+  Eigen::Matrix<double, 6,6> A;
+  Eigen::Matrix<double,6,1> f;
+  Eigen::Matrix3d C,D,F,R;
+  Eigen::Vector3d c,d,b1,b2,T;
+
+  R = tf.block<3,3>(0,0);
+  T = tf.block<3,1>(0,3);
+
+  Eigen::Matrix<double, 4, Eigen::Dynamic> X_1_orig = Eigen::MatrixXd::Map(X_w.data(), 8, X_w.cols()/2).topRows(4);
+  Eigen::Matrix<double, 4, Eigen::Dynamic> X_2_orig = Eigen::MatrixXd::Map(X_w.data(), 8, X_w.cols()/2).bottomRows(4);
+
+  Eigen::Matrix<double, 3, Eigen::Dynamic> X_1,X_2;
+
+
+  bool converged = false;
+  int iter = 0;
+
+  while(!converged && !(iter == MAX_ITER)){
+
+    // Reset matrices
+    A.setZero(6,6);
+    C.setZero(3,3);
+    D.setZero(3,3);
+    F.setZero(3,3);
+    c.setZero(3,1);
+    d.setZero(3,1);
+    f.setZero(6,1);
+    b1.setZero(3,1);
+    b2.setZero(3,1);
+
+    // Rotate p into camera frame
+    X_1 = R*X_1_orig.block(0,0,3,X_1_orig.cols()).eval();
+    X_2 = R*X_2_orig.block(0,0,3,X_2_orig.cols()).eval();
+
+    for(int i = 0; i < l_c.cols();i++){
+
+      Eigen::Vector3d N = l_c.block<3,1>(0,i).normalized();
+
+      b1 = X_1.block<3,1>(0,i).cross(N);
+      b2 = X_2.block<3,1>(0,i).cross(N);
+      C = N*N.transpose();
+      D = (b1*b1.transpose()) + (b2*b2.transpose());
+      F = N*(b1.transpose() + b2.transpose());
+      double scale1 = -N.transpose()*(X_1.block<3,1>(0,i)+T);
+      double scale2 = -N.transpose()*(X_2.block<3,1>(0,i)+T);
+      c = scale1*N + scale2*N;
+      d = scale1*b1 + scale2*b2;
+
+
+      A.block<3,3>(0,0) = A.block<3,3>(0,0).eval() + 2*C;
+      A.block<3,3>(0,3) = A.block<3,3>(0,3).eval() + F;
+      A.block<3,3>(3,3) = A.block<3,3>(3,3).eval() + D;
+
+      f.block<3,1>(0,0) = f.block<3,1>(0,0).eval() + c;
+      f.block<3,1>(3,0) = f.block<3,1>(3,0).eval() + d;
+
+    }
+
+    A.block<3,3>(3,0) = A.block<3,3>(0,3).eval().transpose();
+
+
+    Eigen::ColPivHouseholderQR<Eigen::Matrix<double,6,6>> problem(A);
+    Eigen::Matrix<double,6,1> x = problem.solve(f);
+
+    //std::cout <<x <<"\n\n";
+    Eigen::Vector3d dw = x.block<3,1>(3,0);
+    Eigen::Quaterniond dr(Eigen::AngleAxisd((dw.norm()), dw.normalized()));
+    //dr.normalize();
+    Eigen::Matrix3d dR = dr.toRotationMatrix();
+
+    // Rotate using the obtained quaternion
+
+    Eigen::Quaterniond r(R);
+    //std::cout << "dwnorm = \n" << dw.norm() <<"\n\ndR = \n\n" << dR <<"\n\n";
+
+    R = dR*R.eval();
+    T = x.block<3,1>(0,0) + T.eval();
+
+    if(dw.norm()<0.01){
+      converged = true;
+    }
+
+    iter++;
+
+    std::cout << "R_iter = \n\n" << R << "\n\nT_iter = \n\n" << T <<"\n\n";
+  }
+
+
+
+ }
+
