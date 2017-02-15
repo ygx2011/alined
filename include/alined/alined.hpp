@@ -19,12 +19,19 @@ public:
    * \brief Camera pose from line correspondences using DLT-Combined-Lines method
    *        Pose Estimation from Line Correspondences using Direct Linear Transformation" by
    *        Pribyl, B., Zemcik, P. and Cadik, M.
-   * \param x - 3x(2N) 2D line endpoints (Don't need to correspond to 3D line endpoint locations)
-   * \param X - 4x(2N) 3D line endpoints
+   * \param x_c - 3x(2N) 2D line endpoints (Don't need to correspond to 3D line endpoint locations)
+   * \param X_w - 4x(2N) 3D line endpoints
    * \return Pose
    */
   Eigen::Matrix4d poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w);
 
+  /*!
+   * \brief Camera pose using the iterative approach by Kumar and Hanson. This method needs a good prior.
+   * \param x_c - 3x(2N) 2D line endpoints (Don't need to correspond to 3D line endpoint locations)
+   * \param X_w - 4x(2N) 3D line endpoints
+   * \return Pose
+   */
+  Eigen::Matrix4d poseFromLinesIterative(Eigen::Matrix4d pose, Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w);
 
 
 private:
@@ -59,7 +66,7 @@ private:
   inline Eigen::Vector3d unskew(const Eigen::Matrix3d& skew);
 
   /*!
-   * \brief Iteratively find the correct pose using the R_then_T algorithm by Horn
+   * \brief Iteratively find the correct pose using the R_and_T algorithm by Kumar and Hanson 1994
    * \param tf - Initial Pose
    * \param X - Point matrix
    * \param l_c - 2D line Matrix

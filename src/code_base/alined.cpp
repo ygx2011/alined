@@ -12,6 +12,9 @@ Alined::Alined(DLT_METHOD method, ITERATIVE iterative)
   :method_(method)
   ,iterative_(iterative)
 {
+  std::cout << "ALineD Module\n\n";
+  std::cout << "Using Eigen v."<<EIGEN_WORLD_VERSION<<"."<<EIGEN_MAJOR_VERSION<<"."<<EIGEN_MINOR_VERSION<<"\n";
+  std::cout << "This software has been tested under Eigen v. 3.2.0\n\n";
 
 
 }
@@ -217,14 +220,14 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   //std::cout << "U = " << svd_P.matrixU() <<"\n\n";
   //std::cout << "V = " << svd_P.matrixV() <<"\n\n";
 
-  std::cout << "Condition Factor = " << ((svd_P.singularValues())(0,0))/(svd_P.singularValues()(2,0)) <<"\n\n";
+  //std::cout << "Condition Factor = " << ((svd_P.singularValues())(0,0))/(svd_P.singularValues()(2,0)) <<"\n\n";
 
 
   Eigen::MatrixXd R_est = det*(svd_P.matrixU()*svd_P.matrixV().transpose());
   Eigen::MatrixXd T_est = scale*R_est.transpose()*P2_est;
 
 
-  std::cout << "R_est = \n\n" << R_est <<"\n\n" << "T_est = \n\n" << -T_est << "\n\n";
+  //std::cout << "R_est = \n\n" << R_est <<"\n\n" << "T_est = \n\n" << -T_est << "\n\n";
 
   // Algorithm 3: decomposition of an essential matrix R[t]x
   // from "Uniqueness and estimation of 3D motion...," , Tsai, Huang 1984
@@ -258,7 +261,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   //std::cout << det_A << "\n\n" << det_B << "\n\n";
 
 
-  std::cout << "R_A =\n\n" <<R_A <<"\n\nR_B =\n\n"<<R_B<<"\n\n";
+  //std::cout << "R_A =\n\n" <<R_A <<"\n\nR_B =\n\n"<<R_B<<"\n\n";
 
   // Choose a solution based on which one is closer to R_est (closer to viewing direction)
   double theta_A = acos(((R_A.transpose()*R_est).trace()-1)*0.5);
@@ -278,7 +281,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 
 
 
-  std::cout << "R_est_two =\n\n" <<R_est_two <<"\n\nT_est_two =\n\n"<<T_est_two<<"\n\n";
+  //std::cout << "R_est_two =\n\n" <<R_est_two <<"\n\nT_est_two =\n\n"<<T_est_two<<"\n\n";
 
   // Generate output
   double k = 0.7;
@@ -293,7 +296,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   tf.block<3,1>(0,3) = R*T;
   tf.block<1,4>(3,0) = Eigen::Vector4d(0,0,0,1).transpose();
 
-  std::cout << "Estimated Pose = \n\n"<<tf<<"\n\n";
+  //std::cout << "Estimated Pose = \n\n"<<tf<<"\n\n";
 
   }
 
@@ -471,7 +474,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
     double scale = 3*det/(svd_P.singularValues().array().sum());
 
 
-    std::cout << "Condition Factor = " << ((svd_P.singularValues())(0,0))/(svd_P.singularValues()(2,0)) <<"\n\n";
+    //std::cout << "Condition Factor = " << ((svd_P.singularValues())(0,0))/(svd_P.singularValues()(2,0)) <<"\n\n";
 
 
     Eigen::MatrixXd R_est = det*(svd_P.matrixU()*svd_P.matrixV().transpose());
@@ -481,17 +484,59 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
     tf.block<3,1>(0,3) = R_est*T_est;
     tf.block<1,4>(3,0) = Eigen::Vector4d(0,0,0,1).transpose();
 
-    std::cout << "Estimated Pose = \n\n"<<tf<<"\n\n";
+    //std::cout << "Estimated Pose = \n\n"<<tf<<"\n\n";
 
 
   }
 
-  if(iterative_ == USE_ITERATIVE_REFINEMENT)
+  if(iterative_ == USE_ITERATIVE_REFINEMENT){
     tf = refineIteratively(tf,X_w_orig,l_c_orig);
+  }
 
   toc();
   return tf;
 
+
+}
+
+
+Eigen::Matrix4d Alined::poseFromLinesIterative(Eigen::Matrix4d pose ,Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w){
+
+  //Output matrix
+  Eigen::Matrix4d tf;
+  Eigen::Matrix<double, 3, Eigen::Dynamic> l_c;
+
+  //----------------------- Check input size ----------------------------------------------------------------------//
+  if(X_w.cols()%2 != 0){
+    std::cout << "3D line endpoint vector needs to have even column size. Check dimesions...\n";
+    throw std::exception();
+  }
+
+  if(x_c.cols()!=X_w.cols()){
+    std::cout << "3D line endpoints and 2D line endpoints need to be of equal column size. Check dimensions...\n";
+    throw std::exception();
+  }
+
+  int nlines = (int)(X_w.cols()/2);
+
+  if(nlines < 4){
+    std::cout << "Not enough lines to extract pose from. Required: "<< 4 <<" Provided: "<< nlines <<"\n";
+    throw std::exception();
+  }
+
+  //----------------- Create line measurements vectors-------------------------------------------------------------//
+
+  Eigen::Matrix<double, 3, Eigen::Dynamic> x_1 = Eigen::MatrixXd::Map(x_c.data(),6, x_c.cols()/2).topRows(3);
+  Eigen::Matrix<double, 3, Eigen::Dynamic> x_2 = Eigen::MatrixXd::Map(x_c.data(),6, x_c.cols()/2).bottomRows(3);
+
+
+  l_c.resize(3, nlines);
+
+  for(int i = 0; i < nlines; i++){
+    l_c.block<3,1>(0,i) = x_1.block<3,1>(0,i).cross(x_2.block<3,1>(0,i));
+  }
+
+  return refineIteratively(pose, X_w, l_c);
 
 }
 
@@ -648,9 +693,15 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
     iter++;
 
-    std::cout << "R_iter = \n\n" << R << "\n\nT_iter = \n\n" << T <<"\n\n";
+    //std::cout << "R_iter = \n\n" << R << "\n\nT_iter = \n\n" << T <<"\n\n";
   }
 
+  Eigen::Matrix4d tf_out;
+  tf_out.block<3,3>(0,0) = R;
+  tf_out.block<3,1>(0,3) = T;
+  tf_out.block<1,4>(3,0) = Eigen::Vector4d(0,0,0,1).transpose();
+
+  return tf_out;
 
 
  }
