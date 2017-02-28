@@ -11,15 +11,16 @@ find_package(catkin REQUIRED COMPONENTS
   )
 
 ## System dependencies are found with CMake's conventions
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 find_package(Ceres REQUIRED)
 find_package(Eigen REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include ${Ceres_INCLUDE_DIRS}
-  LIBRARIES
+  LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS roscpp cmake_modules
   DEPENDS Ceres
+
 )
 
 file(GLOB ${PROJECT_NAME}_CODE_BASE

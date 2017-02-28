@@ -8,10 +8,11 @@
 class Alined{
 public:
 
-  enum DLT_METHOD{LINE_DLT,COMBINED_LINES} method_;
-  enum ITERATIVE{NO_REFINEMENT,USE_ITERATIVE_REFINEMENT} iterative_;
+  enum DLT_METHOD_{LINE_DLT,COMBINED_LINES} method_;
+  enum SOLVER_{LEAST_SQUARES,LEVENBERG_MARQUARDT} solver_;
+  enum ITERATIVE_{NO_REFINEMENT,USE_ITERATIVE_REFINEMENT} iterative_;
 
-  Alined(DLT_METHOD = COMBINED_LINES, ITERATIVE = NO_REFINEMENT);
+  Alined(DLT_METHOD_ = COMBINED_LINES, ITERATIVE_ = NO_REFINEMENT);
   ~Alined();
 
 
@@ -31,7 +32,8 @@ public:
    * \param X_w - 4x(2N) 3D line endpoints
    * \return Pose
    */
-  Eigen::Matrix4d poseFromLinesIterative(Eigen::Matrix4d pose, Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w);
+  Eigen::Matrix4d poseFromLinesIterative(Eigen::Matrix4d pose, Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w, SOLVER_ solver = LEAST_SQUARES);
+
 
 
 private:
@@ -72,7 +74,31 @@ private:
    * \param l_c - 2D line Matrix
    * \return Pose
    */
-  Eigen::Matrix4d refineIteratively(const Eigen::Matrix4d &tf, Eigen::Matrix<double,4, Eigen::Dynamic> X_w, Eigen::Matrix<double, 3, Eigen::Dynamic> l_c);
+  Eigen::Matrix4d refineIteratively(const Eigen::Matrix4d &tf, Eigen::Matrix<double,4, Eigen::Dynamic> X_w, Eigen::Matrix<double, 3, Eigen::Dynamic> l_c, Eigen::Matrix<double, 1, Eigen::Dynamic> w);
+
+  /*!
+   * \brief Iteratively find the correct pose using the R_and_T algorithm by Kumar and Hanson 1994
+   *        in a full Levenberg-Marquardt scheme. This reduces divergent behavior at close to singular situations.
+   * \param tf - Initial Pose
+   * \param X - Point matrix
+   * \param l_c - 2D line Matrix
+   * \return Pose
+   */
+  Eigen::Matrix4d levenbergMarquardt(const Eigen::Matrix4d &tf, Eigen::Matrix<double,4, Eigen::Dynamic> X_w, Eigen::Matrix<double, 3, Eigen::Dynamic> l_c, Eigen::Matrix<double, 1, Eigen::Dynamic> w);
+
+  /*!
+   * \brief Calculate the Huber loss function to penalize outliers in the nonlinear optimization
+   * \param cost - incremental cost of measurement i
+   * \return weight - weigth to be used in outlier rejection
+   */
+  double huberLoss(double cost, double scale, double order);
+
+  /*!
+   * \brief Calculate the Huber loss function to penalize outliers in the nonlinear optimization
+   * \param cost - incremental cost of measurement i
+   * \return weight - weigth to be used in outlier rejection
+   */
+  double cauchyLoss(double cost, double scale, double order);
 
 };
 
