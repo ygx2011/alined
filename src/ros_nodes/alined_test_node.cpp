@@ -16,8 +16,8 @@ int main(int argc, char **argv)
   Alined alined(alined.COMBINED_LINES, alined.NO_REFINEMENT);
   Eigen::MatrixXd x_c;
   Eigen::Matrix<double,4, 2*nlines> X_w;
-  //X_w.setRandom(4,2*nlines);
-  //X_w.block<1,2*nlines>(3,0) = Eigen::MatrixXd::Ones(1,2*nlines);
+  X_w.setRandom(4,2*nlines);
+  X_w.block<1,2*nlines>(3,0) = Eigen::MatrixXd::Ones(1,2*nlines);
 
   // Virtual camera position
 
@@ -38,7 +38,7 @@ int main(int argc, char **argv)
   //------------ Build 3D shelf scene ------------------//
 
   // (1,1,0)->(2,1,0)
-  X_w.block<4,1>(0,0) = Eigen::Vector4d(0.02,1,0.0,1);
+  /*X_w.block<4,1>(0,0) = Eigen::Vector4d(0.02,1,0.0,1);
   X_w.block<4,1>(0,1) = Eigen::Vector4d(1.02,1,0.0,1);
 
   // (2,1,0)->(2,2,0)
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
   // (1,2,0)->(1,1,0)
   X_w.block<4,1>(0,6) = Eigen::Vector4d(0.04,1,0.62,1);
   X_w.block<4,1>(0,7) = Eigen::Vector4d(1.04,1,0.62,1);
-/*
+
   // (1,1,0)->(1,1,1)
   X_w.block<4,1>(0,8) = Eigen::Vector4d(0,1,0.8,1);
   X_w.block<4,1>(0,9) = Eigen::Vector4d(0.99,1,0.8,1);
@@ -67,8 +67,8 @@ int main(int argc, char **argv)
 
   // (2,2,1)->(1,2,1)
   X_w.block<4,1>(0,14) = Eigen::Vector4d(2,2,1,1);
-  X_w.block<4,1>(0,15) = Eigen::Vector4d(1,2,1,1);*/
-
+  X_w.block<4,1>(0,15) = Eigen::Vector4d(1,2,1,1);
+*/
 
 
 

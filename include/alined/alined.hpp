@@ -89,16 +89,19 @@ private:
   /*!
    * \brief Calculate the Huber loss function to penalize outliers in the nonlinear optimization
    * \param cost - incremental cost of measurement i
-   * \return weight - weigth to be used in outlier rejection
+   * \param scale - cutoff-cost
+   * \return weights - weigth to be used in outlier rejection
    */
-  double huberLoss(double cost, double scale, double order);
+  Eigen::Vector3d huberLoss(double cost, double scale);
 
   /*!
-   * \brief Calculate the Huber loss function to penalize outliers in the nonlinear optimization
+   * \brief Calculate the Cauchy loss function to penalize outliers in the nonlinear optimization
    * \param cost - incremental cost of measurement i
-   * \return weight - weigth to be used in outlier rejection
+   * \param scale - cutoff-cost
+   * \return weights - weigth to be used in outlier rejection
    */
-  double cauchyLoss(double cost, double scale, double order);
+  Eigen::Vector3d cauchyLoss(double cost, double scale);
+
 
 };
 

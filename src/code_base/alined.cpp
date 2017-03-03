@@ -543,7 +543,7 @@ Eigen::Matrix4d Alined::poseFromLinesIterative(Eigen::Matrix4d pose ,Eigen::Matr
     l_c.block<3,1>(0,i) = x_1.block<3,1>(0,i).cross(x_2.block<3,1>(0,i));
 
     // Weight the iterative algorithm by inverse line length
-    w(0,i) = 1/(((x_1.block<3,1>(0,i)-x_2.block<3,1>(0,i)).norm())*((X_1.block<3,1>(0,i)-X_2.block<3,1>(0,i)).norm()));
+   // w(0,i) = 1/(((x_1.block<3,1>(0,i)-x_2.block<3,1>(0,i)).norm())*((X_1.block<3,1>(0,i)-X_2.block<3,1>(0,i)).norm()));
   }
 
   //std::cout << "W = \n\n"<< w<<"\n\n";
@@ -650,13 +650,15 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
     // Set loss values
 
-    double scale_loss = 2000;
+    double scale_loss = 100000;
 
 
 
     // Set initial cost
     Eigen::MatrixXd loss;
-    loss.setOnes(1,l_c.cols());
+    loss.setOnes(3,l_c.cols());
+    Eigen::MatrixXd cost_i;
+    cost_i.setOnes(3,l_c.cols());
 
 
 
@@ -672,9 +674,8 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
         Eigen::Vector3d N = l_c.block<3,1>(0,i).normalized();
         double cost_sq_1 = w(0,i)*N.transpose()*(X_1.block<3,1>(0,i)+T);
         double cost_sq_2 = w(0,i)*N.transpose()*(X_2.block<3,1>(0,i)+T);
-
-
-        loss(0,i) = huberLoss(cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2,scale_loss,1);
+        cost_i(0,i) = cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2;
+        loss.block<3,1>(0,i) = huberLoss(cost_i(0,i),scale_loss);
 
       }
 
@@ -698,22 +699,25 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
         b1 = X_1.block<3,1>(0,i).cross(N);
         b2 = X_2.block<3,1>(0,i).cross(N);
-        C = (N*N.transpose())*w(0,i)*loss(0,i);
-        D = (b1*b1.transpose())*w(0,i)*loss(0,i) + (b2*b2.transpose())*w(0,i)*loss(0,i);
-        F = N*(b1.transpose() + b2.transpose())*w(0,i)*loss(0,i);
+        C = (N*N.transpose())*w(0,i);
+        D = (b1*b1.transpose())*w(0,i) + (b2*b2.transpose())*w(0,i);
+        F = N*(b1.transpose() + b2.transpose())*w(0,i);
         double scale1 = (-N.transpose()*(X_1.block<3,1>(0,i)+T));
         double scale2 = (-N.transpose()*(X_2.block<3,1>(0,i)+T));
-        scale1 = scale1*w(0,i)*loss(0,i);
-        scale2 = scale2*w(0,i)*loss(0,i);
+        scale1 = scale1*w(0,i);
+        scale2 = scale2*w(0,i);
         c = scale1*N + scale2*N;
         d = scale1*b1 + scale2*b2;
 
-        A.block<3,3>(0,0) = A.block<3,3>(0,0).eval() + 2*C;
-        A.block<3,3>(0,3) = A.block<3,3>(0,3).eval() + F;
-        A.block<3,3>(3,3) = A.block<3,3>(3,3).eval() + D;
+        double loss_A = (loss(1,i)+2*loss(2,i)*cost_i(0,i));
+        double loss_b = loss(1,i);
 
-        f.block<3,1>(0,0) = f.block<3,1>(0,0).eval() + c;
-        f.block<3,1>(3,0) = f.block<3,1>(3,0).eval() + d;
+        A.block<3,3>(0,0) = A.block<3,3>(0,0).eval() + 2*C*loss_A;
+        A.block<3,3>(0,3) = A.block<3,3>(0,3).eval() + F*loss_A;
+        A.block<3,3>(3,3) = A.block<3,3>(3,3).eval() + D*loss_A;
+
+        f.block<3,1>(0,0) = f.block<3,1>(0,0).eval() + c*loss_b;
+        f.block<3,1>(3,0) = f.block<3,1>(3,0).eval() + d*loss_b;
 
       }
 
@@ -777,10 +781,11 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
   // Initial variables, state is set by default
   bool converged = false;
   int iter = 0;
-  double damping = 2;
+  double damping = 0.5;
   double nu = 2.0;
   double rho = -1.0;
-  double scale_loss = 1000;
+  double scale_loss = 1;//Scale is inversely proportional to clipped cost
+
 
 
 
@@ -792,18 +797,18 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
   // Set loss values
   Eigen::MatrixXd loss;
-  loss.setOnes(1,l_c.cols());
+  Eigen::MatrixXd cost_i;
+  loss.setOnes(3,l_c.cols());
+  cost_i.setZero(1,l_c.cols());
 
   for(int i = 0; i < l_c.cols();++i){
 
     Eigen::Vector3d N = l_c.block<3,1>(0,i).normalized();
     double cost_sq_1 = w(0,i)*N.transpose()*(X_1_start.block<3,1>(0,i)+T);
     double cost_sq_2 = w(0,i)*N.transpose()*(X_2_start.block<3,1>(0,i)+T);
-
-    std::cout << "cost: " << cost_sq_1*cost_sq_1+cost_sq_2*cost_sq_2<<"\n\n";
-
-    loss(0,i) = huberLoss(cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2,scale_loss,1);
-    double loss_f_o = huberLoss(cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2,scale_loss,0);
+    cost_i(0,i) = cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2;
+    loss.block<3,1>(0,i) = huberLoss(cost_i(0,i),scale_loss);
+    double loss_f_o = loss(0,i);
 
     cost_old = cost_old + loss_f_o;
   }
@@ -827,29 +832,34 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
     X_1 = R*X_1_orig.block(0,0,3,X_1_orig.cols()).eval();
     X_2 = R*X_2_orig.block(0,0,3,X_2_orig.cols()).eval();
 
+    // Stack the Jacobians and multiply with loss
     for(int i = 0; i < l_c.cols();i++){
 
       Eigen::Vector3d N = l_c.block<3,1>(0,i).normalized();
+   //   std::cout << "Loss: "<< loss(2,i)*cost_i(0,i) + 0.5*loss(1,i)<<"\n";
 
       b1 = X_1.block<3,1>(0,i).cross(N);
       b2 = X_2.block<3,1>(0,i).cross(N);
-      C = (N*N.transpose())*w(0,i)*loss(0,i);
-      D = (b1*b1.transpose())*w(0,i)*loss(0,i) + (b2*b2.transpose())*w(0,i)*loss(0,i);
-      F = N*(b1.transpose() + b2.transpose())*w(0,i)*loss(0,i);
+      C = (N*N.transpose())*w(0,i);
+      D = (b1*b1.transpose())*w(0,i) + (b2*b2.transpose())*w(0,i);
+      F = N*(b1.transpose() + b2.transpose())*w(0,i);
       double scale1 = (-N.transpose()*(X_1.block<3,1>(0,i)+T));
       double scale2 = (-N.transpose()*(X_2.block<3,1>(0,i)+T));
-      scale1 = scale1*w(0,i)*loss(0,i);
-      scale2 = scale2*w(0,i)*loss(0,i);
+      scale1 = scale1*w(0,i);
+      scale2 = scale2*w(0,i);
       c = scale1*N + scale2*N;
       d = scale1*b1 + scale2*b2;
 
+      double loss_A = (loss(1,i)+2*loss(2,i)*cost_i(0,i));
+      double loss_b = loss(1,i);
 
-      A.block<3,3>(0,0) = A.block<3,3>(0,0).eval() + 2*C;
-      A.block<3,3>(0,3) = A.block<3,3>(0,3).eval() + F;
-      A.block<3,3>(3,3) = A.block<3,3>(3,3).eval() + D;
+      A.block<3,3>(0,0) = A.block<3,3>(0,0).eval() + 2*C*loss_A;
+      A.block<3,3>(0,3) = A.block<3,3>(0,3).eval() + F*loss_A;
+      A.block<3,3>(3,3) = A.block<3,3>(3,3).eval() + D*loss_A;
 
-      f.block<3,1>(0,0) = f.block<3,1>(0,0).eval() + c;
-      f.block<3,1>(3,0) = f.block<3,1>(3,0).eval() + d;
+      f.block<3,1>(0,0) = f.block<3,1>(0,0).eval() + c*loss_b;
+      f.block<3,1>(3,0) = f.block<3,1>(3,0).eval() + d*loss_b;
+
 
     }
 
@@ -889,24 +899,29 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
         X_2 = tmp_R*X_2_orig.block(0,0,3,X_2_orig.cols()).eval();
 
         double cost = 0.0;
+        Eigen::MatrixXd cost_temp;
+        cost_temp.setZero(1,l_c.cols());
+
         for(int i = 0; i < l_c.cols();++i){
 
           Eigen::Vector3d N = l_c.block<3,1>(0,i).normalized();
           double cost_sq_1 = w(0,i)*N.transpose()*(X_1.block<3,1>(0,i)+tmp_T);
           double cost_sq_2 = w(0,i)*N.transpose()*(X_2.block<3,1>(0,i)+tmp_T);
 
-          loss(0,i) = huberLoss(cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2,scale_loss,1);
-          double loss_f_o = huberLoss(cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2,scale_loss,0);
+          cost_temp(0,i) = cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2;
+          loss.block<3,1>(0,i) = huberLoss(cost_temp(0,i),scale_loss);
+          double loss_f_o = loss(0,i);
 
           cost = cost + loss_f_o;
         }
 
-        double rho = (cost_old-cost)/fabs(x.transpose()*(damping*x+f));
+        double rho = (cost_old-cost)/(x.transpose()*(damping*x+f));
 
         if(rho > 0){
           R = tmp_R;
           T = tmp_T;
           cost_old = cost;
+          cost_i = cost_temp;
           double precalc = 1.0-(2.0*rho-1.0)*(2.0*rho-1.0)*(2.0*rho-1.0);
           damping = damping*(0.33333333333 > precalc ? 0.33333333333 : precalc);
           nu = 2;
@@ -939,40 +954,49 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
  }
 
-  double Alined::huberLoss(double cost, double scale, double order){
+  Eigen::Vector3d Alined::huberLoss(double cost, double scale){
 
-    if(cost*scale<=1.0){
+    double a = scale*scale;
 
-      if(order == 1)
-        return scale;
+    // Cost according to the rules by [Triggs, 99]
+    if((cost/a) <=1.0){
 
-      if(order == 0)
-        return cost*scale;
+      // rho, rho', rho''
+      return Eigen::Vector3d(cost, 1,0.0);
 
 
     }
     else{
 
-      if(order == 1)
-        return scale/sqrt(cost);
 
-      if(order == 0)
-        return 2*sqrt(scale*cost)-1;
+      return Eigen::Vector3d(a*(2*sqrt(cost/a)-1), sqrt(a/cost), -0.5*sqrt(a)/(sqrt(cost)*sqrt(cost)*sqrt(cost)));
 
+    }
+
+  }
+
+  Eigen::Vector3d Alined::cauchyLoss(double cost, double scale){
+
+    double a = scale*scale;
+
+    // Cost according to the rules by [Triggs, 99]
+    if((cost/a) <=1.0){
+
+      // rho, rho', rho''
+      return Eigen::Vector3d(cost, 1,0.0);
+
+
+    }
+    else{
+
+
+      return Eigen::Vector3d(a*(2*sqrt(cost/a)-1), sqrt(a/cost), -0.5*sqrt(a)/(sqrt(cost)*sqrt(cost)*sqrt(cost)));
 
     }
 
   }
 
 
-  double Alined::cauchyLoss(double cost, double scale, double order){
 
-
-      if(order == 1)
-        return 1.0/(1.0+cost);
-
-      if(order == 0)
-        return log(1.0+cost);
-
-
-  }
+  
+  
