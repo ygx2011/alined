@@ -1,18 +1,50 @@
+/*
+* Copyright (C) 2016 Andrea Luca Lampart <lamparta at student dot ethz dot ch> (ETH Zurich)
+* For more information see <https://github.com/andrealampart/alined>
+*
+* ALineD is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* ALineD is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with ALineD. If not, see <http://www.gnu.org/licenses/>.
+*/
 #pragma once
 
 #include "Eigen/Eigen"
 #include "Eigen/Geometry"
 #include "Eigen/SVD"
 
+#include <functional>
+
+
+#define AL_LINE_DLT                 1
+#define AL_COMBINED_LINES           2
+#define AL_LEAST_SQUARES            4
+#define AL_LEVENBERG_MARQUARDT      8
+#define AL_NO_REFINE                16
+#define AL_USE_REFINE               32
+#define AL_HUBER_LOSS               64
+#define AL_CAUCHY_LOSS              128
+
+#define AL_MIN_LINES_COMBINED 5
+#define AL_MIN_LINES_DLT 6
+#define AL_MAX_ITER 1000
 
 class Alined{
 public:
 
-  enum DLT_METHOD_{LINE_DLT,COMBINED_LINES} method_;
-  enum SOLVER_{LEAST_SQUARES,LEVENBERG_MARQUARDT} solver_;
-  enum ITERATIVE_{NO_REFINEMENT,USE_ITERATIVE_REFINEMENT} iterative_;
+  unsigned char method_;
+  unsigned char solver_;
+  unsigned char iterative_;
 
-  Alined(DLT_METHOD_ = COMBINED_LINES, ITERATIVE_ = NO_REFINEMENT);
+  Alined(unsigned char config);
   ~Alined();
 
 
@@ -32,11 +64,23 @@ public:
    * \param X_w - 4x(2N) 3D line endpoints
    * \return Pose
    */
-  Eigen::Matrix4d poseFromLinesIterative(Eigen::Matrix4d pose, Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w, SOLVER_ solver = LEAST_SQUARES);
+  Eigen::Matrix4d poseFromLinesIterative(Eigen::Matrix4d pose, Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w);
 
-
+  /*!
+   * \brief Set scale of loss function
+   * \param scale
+   */
+  void setLossScale(const double &scale);
 
 private:
+
+  double loss_scale_;
+
+  /*!
+   * \brief Wrapping any loss function
+   */
+  std::function<Eigen::Vector3d(const double&)> lossFunc_;
+
 
   /*!
    * \brief Create Plucker Line from two points only
@@ -92,7 +136,7 @@ private:
    * \param scale - cutoff-cost
    * \return weights - weigth to be used in outlier rejection
    */
-  Eigen::Vector3d huberLoss(double cost, double scale);
+  Eigen::Vector3d huberLoss(const double &cost);
 
   /*!
    * \brief Calculate the Cauchy loss function to penalize outliers in the nonlinear optimization
@@ -100,7 +144,7 @@ private:
    * \param scale - cutoff-cost
    * \return weights - weigth to be used in outlier rejection
    */
-  Eigen::Vector3d cauchyLoss(double cost, double scale);
+  Eigen::Vector3d cauchyLoss(const double &cost);
 
 
 };

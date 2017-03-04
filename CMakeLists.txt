@@ -12,11 +12,10 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 #set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-find_package(Ceres REQUIRED)
 find_package(Eigen REQUIRED)
 
 catkin_package(
-  INCLUDE_DIRS include ${Ceres_INCLUDE_DIRS}
+  INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS roscpp cmake_modules
   DEPENDS Ceres
@@ -31,14 +30,13 @@ file(GLOB ${PROJECT_NAME}_CODE_BASE
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
-  ${Ceres_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
   )
 
 add_executable(alined_test
   src/ros_nodes/alined_test_node.cpp
   ${${PROJECT_NAME}_CODE_BASE})
-target_link_libraries(alined_test ${catkin_LIBRARIES} ${CERES_LIBRARIES})
+target_link_libraries(alined_test ${catkin_LIBRARIES})
 
 
 

@@ -1,21 +1,49 @@
+/*
+* Copyright (C) 2016 Andrea Luca Lampart <lamparta at student dot ethz dot ch> (ETH Zurich)
+* For more information see <https://github.com/andrealampart/alined>
+*
+* ALineD is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* ALineD is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with ALineD. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "alined/alined.hpp"
 #include "exception"
 #include "iostream"
 #include "unsupported/Eigen/MatrixFunctions"
 #include "external/tic_toc.hpp"
 
-#define MIN_LINES_COMBINED 5
-#define MIN_LINES_DLT 6
-#define MAX_ITER 1000
 
-Alined::Alined(DLT_METHOD_ method, ITERATIVE_ iterative)
-  :method_(method)
-  ,iterative_(iterative)
+
+Alined::Alined(unsigned char config)
+  :loss_scale_(1.0)
 {
   std::cout << "ALineD Module\n\n";
   std::cout << "Using Eigen v."<<EIGEN_WORLD_VERSION<<"."<<EIGEN_MAJOR_VERSION<<"."<<EIGEN_MINOR_VERSION<<"\n";
   std::cout << "This software has been tested under Eigen v. 3.2.0\n\n";
 
+  method_ = config & (AL_LINE_DLT|AL_COMBINED_LINES);
+  solver_ = config & (AL_LEAST_SQUARES|AL_LEVENBERG_MARQUARDT);
+  iterative_ = config & (AL_NO_REFINE|AL_USE_REFINE);
+
+  if((config & AL_HUBER_LOSS) == AL_HUBER_LOSS){
+    lossFunc_ = std::bind(&Alined::huberLoss, this, std::placeholders::_1);
+  }
+  else if((config & AL_CAUCHY_LOSS) == AL_CAUCHY_LOSS){
+    lossFunc_ = std::bind(&Alined::cauchyLoss, this, std::placeholders::_1);
+  }
+  else{
+     lossFunc_ = std::bind(&Alined::huberLoss, this, std::placeholders::_1);
+  }
 
 }
 
@@ -35,7 +63,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   Eigen::MatrixXd l_c_orig;
 
 //----------------------------DLT-COMBINED-LINES-------------------------------------------------------------------//
-  if(method_ == COMBINED_LINES){
+  if(method_ == AL_COMBINED_LINES){
 
 // Following the matlab implementation of the original authors...
 
@@ -52,8 +80,8 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 
   int nlines = (int)(X_w.cols()/2);
 
-  if(nlines < MIN_LINES_COMBINED){
-    std::cout << "Not enough lines to extract pose from. Required: "<< MIN_LINES_COMBINED <<" Provided: "<< nlines <<"\n";
+  if(nlines < AL_MIN_LINES_COMBINED){
+    std::cout << "Not enough lines to extract pose from. Required: "<< AL_MIN_LINES_COMBINED <<" Provided: "<< nlines <<"\n";
     throw std::exception();
   }
 
@@ -301,7 +329,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
   }
 
   //----------------------------------DLT-LINES----------------------------------------------------------------------//
-  else if(method_ == LINE_DLT){
+  else if(method_ == AL_LINE_DLT){
 
     //----------------------- Check input size ----------------------------------------------------------------------//
     if(X_w.cols()%2 != 0){
@@ -316,8 +344,8 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 
     int nlines = (int)(X_w.cols()/2);
 
-    if(nlines < MIN_LINES_DLT){
-      std::cout << "Not enough lines to extract pose from. Required: "<< MIN_LINES_DLT <<" Provided: "<< nlines <<"\n";
+    if(nlines < AL_MIN_LINES_DLT){
+      std::cout << "Not enough lines to extract pose from. Required: "<< AL_MIN_LINES_DLT <<" Provided: "<< nlines <<"\n";
       throw std::exception();
     }
 
@@ -489,7 +517,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 
   }
 
-  if(iterative_ == USE_ITERATIVE_REFINEMENT){
+  if(iterative_ == AL_USE_REFINE){
 
     Eigen::MatrixXd w = Eigen::MatrixXd::Ones(1,l_c.cols());
     tf = refineIteratively(tf,X_w_orig,l_c_orig,w);
@@ -502,7 +530,7 @@ Eigen::Matrix4d Alined::poseFromLines(Eigen::Matrix<double,3,Eigen::Dynamic> x_c
 }
 
 
-Eigen::Matrix4d Alined::poseFromLinesIterative(Eigen::Matrix4d pose ,Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w, SOLVER_ solver){
+Eigen::Matrix4d Alined::poseFromLinesIterative(Eigen::Matrix4d pose ,Eigen::Matrix<double,3,Eigen::Dynamic> x_c, Eigen::Matrix<double,4,Eigen::Dynamic> X_w){
 
   //Output matrix
   Eigen::Matrix4d tf;
@@ -547,7 +575,7 @@ Eigen::Matrix4d Alined::poseFromLinesIterative(Eigen::Matrix4d pose ,Eigen::Matr
   }
 
   //std::cout << "W = \n\n"<< w<<"\n\n";
-  if(solver == LEAST_SQUARES){
+  if(solver_ == AL_LEAST_SQUARES){
     return refineIteratively(pose, X_w, l_c, w);
   }
   else{
@@ -648,11 +676,6 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
     bool converged = false;
     int iter = 0;
 
-    // Set loss values
-
-    double scale_loss = 100000;
-
-
 
     // Set initial cost
     Eigen::MatrixXd loss;
@@ -663,7 +686,7 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
 
 
-    while(!converged && !(iter == MAX_ITER)){
+    while(!converged && !(iter == AL_MAX_ITER)){
 
       // Rotate p into camera frame
       X_1 = R*X_1_orig.block(0,0,3,X_1_orig.cols()).eval();
@@ -675,7 +698,7 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
         double cost_sq_1 = w(0,i)*N.transpose()*(X_1.block<3,1>(0,i)+T);
         double cost_sq_2 = w(0,i)*N.transpose()*(X_2.block<3,1>(0,i)+T);
         cost_i(0,i) = cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2;
-        loss.block<3,1>(0,i) = huberLoss(cost_i(0,i),scale_loss);
+        loss.block<3,1>(0,i) = lossFunc_(cost_i(0,i));
 
       }
 
@@ -784,8 +807,6 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
   double damping = 0.5;
   double nu = 2.0;
   double rho = -1.0;
-  double scale_loss = 1;//Scale is inversely proportional to clipped cost
-
 
 
 
@@ -807,7 +828,7 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
     double cost_sq_1 = w(0,i)*N.transpose()*(X_1_start.block<3,1>(0,i)+T);
     double cost_sq_2 = w(0,i)*N.transpose()*(X_2_start.block<3,1>(0,i)+T);
     cost_i(0,i) = cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2;
-    loss.block<3,1>(0,i) = huberLoss(cost_i(0,i),scale_loss);
+    loss.block<3,1>(0,i) = lossFunc_(cost_i(0,i));
     double loss_f_o = loss(0,i);
 
     cost_old = cost_old + loss_f_o;
@@ -815,7 +836,7 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
 
 
-  while(!converged && !(iter == MAX_ITER)){
+  while(!converged && !(iter == AL_MAX_ITER)){
 
     // Reset matrices
     A.setZero(6,6);
@@ -909,7 +930,7 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
           double cost_sq_2 = w(0,i)*N.transpose()*(X_2.block<3,1>(0,i)+tmp_T);
 
           cost_temp(0,i) = cost_sq_1*cost_sq_1 + cost_sq_2*cost_sq_2;
-          loss.block<3,1>(0,i) = huberLoss(cost_temp(0,i),scale_loss);
+          loss.block<3,1>(0,i) = lossFunc_(cost_temp(0,i));
           double loss_f_o = loss(0,i);
 
           cost = cost + loss_f_o;
@@ -954,30 +975,9 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
 
  }
 
-  Eigen::Vector3d Alined::huberLoss(double cost, double scale){
+  Eigen::Vector3d Alined::huberLoss(const double &cost){
 
-    double a = scale*scale;
-
-    // Cost according to the rules by [Triggs, 99]
-    if((cost/a) <=1.0){
-
-      // rho, rho', rho''
-      return Eigen::Vector3d(cost, 1,0.0);
-
-
-    }
-    else{
-
-
-      return Eigen::Vector3d(a*(2*sqrt(cost/a)-1), sqrt(a/cost), -0.5*sqrt(a)/(sqrt(cost)*sqrt(cost)*sqrt(cost)));
-
-    }
-
-  }
-
-  Eigen::Vector3d Alined::cauchyLoss(double cost, double scale){
-
-    double a = scale*scale;
+    double a = loss_scale_*loss_scale_;
 
     // Cost according to the rules by [Triggs, 99]
     if((cost/a) <=1.0){
@@ -989,13 +989,25 @@ Eigen::Matrix<double,6,Eigen::Dynamic> Alined::createPluckerLines(const Eigen::M
     }
     else{
 
-
       return Eigen::Vector3d(a*(2*sqrt(cost/a)-1), sqrt(a/cost), -0.5*sqrt(a)/(sqrt(cost)*sqrt(cost)*sqrt(cost)));
 
     }
 
   }
 
+  Eigen::Vector3d Alined::cauchyLoss(const double &cost){
+
+    double a = loss_scale_*loss_scale_;
+
+    // Cost according to the rules by [Triggs, 99]
+    // tho, tho', rho''
+    return Eigen::Vector3d(a*log(1+cost/a), 1.0/(1.0+cost/a), -1/(a*(1.0+cost/a)*(1.0+cost/a)));
+
+  }
+
+   void Alined::setLossScale(const double &scale){
+     loss_scale_ = scale;
+   }
 
 
   
